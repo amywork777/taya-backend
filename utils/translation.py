@@ -112,7 +112,14 @@ _non_lexical_utterances_pattern = re.compile(
 )
 
 # Initialize the translation client globally
-_client = translate_v3.TranslationServiceClient()
+import json
+if os.environ.get('SERVICE_ACCOUNT_JSON'):
+    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+    from google.oauth2 import service_account
+    credentials = service_account.Credentials.from_service_account_info(service_account_info)
+    _client = translate_v3.TranslationServiceClient(credentials=credentials)
+else:
+    _client = translate_v3.TranslationServiceClient()
 _parent = f"projects/{PROJECT_ID}/locations/global"
 _mime_type = "text/plain"
 
