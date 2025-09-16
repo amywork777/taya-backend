@@ -1,0 +1,69 @@
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Google Cloud credentials
+service-account.json
+*credentials*.json
+application_default_credentials.json
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Temporary files
+_temp/
+_samples/
+_segments/
+_speech_profiles/
+
+# Node modules (if any)
+node_modules/
+
+# Database
+*.db
+*.sqlite
+
+# Keys and secrets
+*.pem
+*.key
+private_key.json
