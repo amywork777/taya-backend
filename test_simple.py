@@ -22,6 +22,19 @@ FAKE_CONVERSATIONS = [
         "overview": "This is a test conversation without authentication",
         "emoji": "🤖",
         "category": "test",
+        "created_at": "2025-09-17T00:00:00Z",  # ✅ REQUIRED by mobile app
+        "started_at": "2025-09-17T00:00:00Z",  # ✅ REQUIRED by mobile app
+        "finished_at": "2025-09-17T00:05:00Z", # ✅ REQUIRED by mobile app
+        "structured": {                         # ✅ REQUIRED by mobile app
+            "title": "Test Conversation",
+            "overview": "This is a test conversation without authentication",
+            "emoji": "🤖",
+            "category": "test",
+            "action_items": [
+                {"description": "Test the new backend", "completed": False}
+            ],
+            "events": []
+        },
         "transcript_segments": [
             {"text": "Hello world", "speaker": "SPEAKER_0", "start": 0.0, "end": 2.0}
         ],
@@ -34,10 +47,13 @@ FAKE_CONVERSATIONS = [
 FAKE_MEMORIES = [
     {
         "id": "memory-1",
+        "uid": "test-user-id",                  # ✅ REQUIRED by mobile app
         "title": "Test Memory",
+        "content": "This works without auth!",  # ✅ REQUIRED (was 'overview')
         "overview": "This works without auth!",
-        "category": "test",
-        "created_at": "2025-09-17T00:00:00Z"
+        "category": "interesting",              # ✅ Must match enum values
+        "created_at": "2025-09-17T00:00:00Z",
+        "updated_at": "2025-09-17T00:00:00Z"   # ✅ REQUIRED by mobile app
     }
 ]
 
@@ -61,12 +77,26 @@ def get_conversations():
 @app.post("/v1/conversations")
 def create_conversation(data: dict):
     """Create conversation without authentication"""
+    import datetime
+    now = datetime.datetime.utcnow().isoformat() + "Z"
+
     new_conversation = {
         "id": f"test-{len(FAKE_CONVERSATIONS) + 1}",
         "title": data.get("title", "New Conversation"),
         "overview": data.get("overview", ""),
         "emoji": "🆕",
         "category": "user",
+        "created_at": now,  # ✅ REQUIRED by mobile app
+        "started_at": now,  # ✅ REQUIRED by mobile app
+        "finished_at": now, # ✅ REQUIRED by mobile app
+        "structured": {     # ✅ REQUIRED by mobile app
+            "title": data.get("title", "New Conversation"),
+            "overview": data.get("overview", ""),
+            "emoji": "🆕",
+            "category": "user",
+            "action_items": data.get("action_items", []),
+            "events": []
+        },
         "transcript_segments": data.get("transcript_segments", []),
         "action_items": data.get("action_items", [])
     }
