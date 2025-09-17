@@ -1,5 +1,5 @@
 # IMPORTANT: Import credential setup FIRST before any other imports
-# Force GitHub cache update
+# Railway deployment fix - proper Python indentation
 import setup_credentials
 
 import json
