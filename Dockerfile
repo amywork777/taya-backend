@@ -18,5 +18,5 @@ EXPOSE 8080
 RUN find . -name "*.pyc" -delete
 RUN find . -name "__pycache__" -delete
 
-# Explicitly start the no-auth AI backend with full features
-CMD python -c "import app_noauth; print('Starting app_noauth.py - Full AI Backend No Auth'); import uvicorn; uvicorn.run('app_noauth:app', host='0.0.0.0', port=8080)"
+# Start full-featured backend with database storage but no auth
+CMD python -c "import railway_full_noauth; print('Starting railway_full_noauth.py - Full Backend with Database No Auth'); import uvicorn; uvicorn.run('railway_full_noauth:app', host='0.0.0.0', port=8080)"
