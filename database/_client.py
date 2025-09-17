@@ -1,24 +1,14 @@
+# IMPORTANT: Ensure credentials are set up before any Google Cloud imports
+import setup_credentials
+
 import hashlib
 import json
 import os
 import uuid
-import base64
 
 from google.cloud import firestore
 import firebase_admin
 from firebase_admin import credentials
-
-# Setup Google Cloud credentials from base64 if SERVICE_ACCOUNT_JSON is not provided
-if not os.environ.get('SERVICE_ACCOUNT_JSON') and os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_BASE64'):
-    try:
-        credentials_base64 = os.environ['GOOGLE_APPLICATION_CREDENTIALS_BASE64']
-        credentials_json = base64.b64decode(credentials_base64).decode('utf-8')
-        # Set SERVICE_ACCOUNT_JSON so existing code can use it
-        os.environ['SERVICE_ACCOUNT_JSON'] = credentials_json
-        print("✅ Google Cloud credentials set up from base64 in _client.py")
-    except Exception as e:
-        print(f"❌ Error setting up Google Cloud credentials from base64 in _client.py: {e}")
-        raise
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
