@@ -14,5 +14,5 @@ COPY . .
 
 EXPOSE 8080
 
-# Force start AI-enabled no-auth FastAPI server
-CMD ["uvicorn", "railway_noauth:app", "--host", "0.0.0.0", "--port", "8080"]
+# Force start AI-enabled no-auth FastAPI server with Deepgram
+CMD ["uvicorn", "railway_noauth:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
