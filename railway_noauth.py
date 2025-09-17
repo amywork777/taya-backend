@@ -1,10 +1,12 @@
 import json
 import os
 import firebase_admin
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from datetime import datetime, timezone
+import asyncio
+import base64
 
 # Import the AI processing functions we need
 from utils.conversations.process_conversation import process_conversation, create_conversation_from_data
@@ -204,6 +206,135 @@ def create_memory(memory: dict):
 def get_public_conversations():
     """Mock public conversations like Omi's backend"""
     return CONVERSATIONS_STORAGE
+
+# TRANSCRIPTION ENDPOINTS
+
+@app.websocket("/v4/listen")
+async def websocket_transcribe(
+    websocket: WebSocket,
+    uid: str = "test-user",
+    language: str = "en",
+    sample_rate: int = 8000,
+    codec: str = "pcm16",
+    channels: int = 1,
+    include_speech_profile: bool = False
+):
+    """
+    Simplified transcription WebSocket for testing (no real STT)
+    This is a mock endpoint that simulates transcription responses
+    """
+    await websocket.accept()
+
+    try:
+        # Send initial connection success
+        await websocket.send_json({
+            "type": "message_event",
+            "event": "conversation_started",
+            "data": {
+                "conversation_id": f"mock-{datetime.now().timestamp()}",
+                "session_id": f"session-{datetime.now().timestamp()}"
+            }
+        })
+
+        segment_counter = 0
+
+        while True:
+            try:
+                # Receive audio data
+                data = await websocket.receive()
+
+                if data["type"] == "websocket.receive":
+                    if "bytes" in data:
+                        # Mock transcription response after receiving audio
+                        segment_counter += 1
+
+                        # Send mock transcript segment
+                        mock_segment = {
+                            "type": "message_event",
+                            "event": "segment_received",
+                            "data": {
+                                "segment": {
+                                    "text": f"Mock transcribed audio segment {segment_counter}",
+                                    "speaker": "SPEAKER_0",
+                                    "speaker_id": 0,
+                                    "is_user": True,
+                                    "start": segment_counter * 2.0,
+                                    "end": (segment_counter * 2.0) + 1.8,
+                                    "confidence": 0.95
+                                },
+                                "session_id": f"session-{datetime.now().timestamp()}"
+                            }
+                        }
+
+                        await websocket.send_json(mock_segment)
+
+                    elif "text" in data:
+                        # Handle text messages (like heartbeat)
+                        message = data["text"]
+                        if message == "heartbeat":
+                            await websocket.send_json({
+                                "type": "message_event",
+                                "event": "heartbeat_ack",
+                                "data": {}
+                            })
+
+            except asyncio.TimeoutError:
+                # Send heartbeat if no data received
+                await websocket.send_json({
+                    "type": "message_event",
+                    "event": "heartbeat",
+                    "data": {}
+                })
+
+    except WebSocketDisconnect:
+        print("WebSocket disconnected")
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        try:
+            await websocket.close(code=1011, reason="Internal server error")
+        except:
+            pass
+
+@app.post("/v1/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    """
+    Simple audio file transcription endpoint (mock for testing)
+    In production, this would use Deepgram/Whisper/etc.
+    """
+    try:
+        # Read the uploaded audio file
+        audio_content = await file.read()
+
+        # Mock transcription result
+        mock_transcript = [
+            {
+                "text": "This is a mock transcription of your audio file.",
+                "speaker": "SPEAKER_0",
+                "speaker_id": 0,
+                "start": 0.0,
+                "end": 3.0,
+                "confidence": 0.95
+            },
+            {
+                "text": "The AI processing will work on this mock transcript.",
+                "speaker": "SPEAKER_0",
+                "speaker_id": 0,
+                "start": 3.0,
+                "end": 6.0,
+                "confidence": 0.92
+            }
+        ]
+
+        return {
+            "success": True,
+            "transcript": mock_transcript,
+            "language": "en",
+            "duration": 6.0,
+            "note": "This is a mock transcription for testing. Real STT requires audio processing setup."
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
 
 # Create necessary directories
 paths = ['_temp', '_samples', '_segments', '_speech_profiles']
