@@ -10,11 +10,8 @@ import base64
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
 
-# Import the AI processing functions we need
-from utils.conversations.process_conversation import process_conversation, create_conversation_from_data
-from utils.llm.conversation_processing import get_transcript_structure, should_discard_conversation
-from models.conversation import CreateConversation, Conversation, ConversationStatus, ConversationSource
-from models.memories import Memory
+# Import standalone AI processing functions (no database dependencies)
+from standalone_ai import get_transcript_structure, should_discard_conversation
 
 # Initialize Firebase for AI features
 if not firebase_admin._apps:
@@ -211,8 +208,8 @@ def get_public_conversations():
 
 # TRANSCRIPTION ENDPOINTS - Real Deepgram Integration
 
-# Import STT functionality
-from utils.stt.streaming import get_stt_service_for_language, STTService, process_audio_dg
+# Import STT functionality (simplified for no-auth)
+# from utils.stt.streaming import get_stt_service_for_language, STTService, process_audio_dg
 
 # Initialize Deepgram client
 deepgram_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
@@ -248,49 +245,58 @@ async def websocket_transcribe(
             }
         })
 
-        # Get STT service and model for language
-        stt_service, stt_language, model = get_stt_service_for_language(language)
-        print(f"Using {stt_service} with language {stt_language} and model {model}")
+        # Use Deepgram with simplified configuration
+        model = "nova-2-general"
+        print(f"Using Deepgram with language {language} and model {model}")
 
-        # Stream transcript callback
-        def stream_transcript(segments):
-            for segment in segments:
-                # Send segment to client
-                asyncio.create_task(websocket.send_json({
-                    "type": "message_event",
-                    "event": "segment_received",
-                    "data": {
-                        "segment": {
-                            "text": segment["text"],
-                            "speaker": segment["speaker"],
-                            "speaker_id": int(segment["speaker"].split("_")[-1]) if "_" in segment["speaker"] else 0,
-                            "is_user": segment["is_user"],
-                            "start": segment["start"],
-                            "end": segment["end"],
-                            "confidence": 0.95  # Default confidence
-                        },
-                        "session_id": session_id
-                    }
-                }))
+        # Initialize Deepgram connection
+        dg_connection = deepgram.listen.websocket.v("1")
 
-        # Initialize STT connection based on service
-        if stt_service == STTService.deepgram:
-            stt_socket = await process_audio_dg(
-                stream_transcript=stream_transcript,
-                language=stt_language,
-                sample_rate=sample_rate,
-                channels=channels,
-                model=model
-            )
-        else:
-            # Fallback to Deepgram if other services not available
-            stt_socket = await process_audio_dg(
-                stream_transcript=stream_transcript,
-                language="en",
-                sample_rate=sample_rate,
-                channels=channels,
-                model="nova-2-general"
-            )
+        def on_message(self, result, **kwargs):
+            sentence = result.channel.alternatives[0].transcript
+            if len(sentence) == 0:
+                return
+
+            # Create simple segment
+            segment = {
+                "text": sentence,
+                "speaker": "SPEAKER_0",
+                "speaker_id": 0,
+                "is_user": True,
+                "start": 0.0,
+                "end": 2.0,
+                "confidence": 0.95
+            }
+
+            # Send segment to client
+            asyncio.create_task(websocket.send_json({
+                "type": "message_event",
+                "event": "segment_received",
+                "data": {
+                    "segment": segment,
+                    "session_id": session_id
+                }
+            }))
+
+        def on_error(self, error, **kwargs):
+            print(f"Deepgram error: {error}")
+
+        dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
+        dg_connection.on(LiveTranscriptionEvents.Error, on_error)
+
+        # Configure Deepgram options
+        options = LiveOptions(
+            punctuate=True,
+            language=language,
+            model=model,
+            sample_rate=sample_rate,
+            encoding='linear16',
+            channels=channels
+        )
+
+        # Start Deepgram connection
+        dg_connection.start(options)
+        stt_socket = dg_connection
 
         # Audio processing loop
         while True:
