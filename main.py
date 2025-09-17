@@ -1,7 +1,9 @@
+# IMPORTANT: Import credential setup FIRST before any other imports
+  import setup_credentials
+
   import json
   import os
   import base64
-
   import firebase_admin
   from fastapi import FastAPI
 
@@ -35,7 +37,6 @@
 
   if not firebase_admin._apps:
       if os.environ.get('SERVICE_ACCOUNT_JSON'):
-          # Direct JSON string (Modal/local development)
           service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
           credentials = firebase_admin.credentials.Certificate(service_account_info)
           firebase_admin.initialize_app(credentials)
