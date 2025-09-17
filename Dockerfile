@@ -9,10 +9,14 @@ RUN apt-get update && apt-get -y install ffmpeg curl unzip git gcc build-essenti
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application
+# Copy application files
 COPY . .
 
 EXPOSE 8080
 
-# Force start AI-enabled no-auth FastAPI server with Deepgram
-CMD ["uvicorn", "railway_noauth:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+# Clear any cached bytecode
+RUN find . -name "*.pyc" -delete
+RUN find . -name "__pycache__" -delete
+
+# Explicitly start the no-auth AI backend with full features
+CMD python -c "import railway_noauth; print('Starting railway_noauth.py'); import uvicorn; uvicorn.run('railway_noauth:app', host='0.0.0.0', port=8080)"
