@@ -7,6 +7,8 @@ from typing import List, Optional
 from datetime import datetime, timezone
 import asyncio
 import base64
+from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
+from deepgram.clients.live.v1 import LiveOptions
 
 # Import the AI processing functions we need
 from utils.conversations.process_conversation import process_conversation, create_conversation_from_data
@@ -207,7 +209,14 @@ def get_public_conversations():
     """Mock public conversations like Omi's backend"""
     return CONVERSATIONS_STORAGE
 
-# TRANSCRIPTION ENDPOINTS
+# TRANSCRIPTION ENDPOINTS - Real Deepgram Integration
+
+# Import STT functionality
+from utils.stt.streaming import get_stt_service_for_language, STTService, process_audio_dg
+
+# Initialize Deepgram client
+deepgram_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
+deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_options)
 
 @app.websocket("/v4/listen")
 async def websocket_transcribe(
@@ -220,10 +229,13 @@ async def websocket_transcribe(
     include_speech_profile: bool = False
 ):
     """
-    Simplified transcription WebSocket for testing (no real STT)
-    This is a mock endpoint that simulates transcription responses
+    Real-time transcription WebSocket using Deepgram (no auth required)
     """
     await websocket.accept()
+
+    # Track segments for this session
+    session_id = f"session-{datetime.now().timestamp()}"
+    conversation_id = f"conv-{datetime.now().timestamp()}"
 
     try:
         # Send initial connection success
@@ -231,42 +243,67 @@ async def websocket_transcribe(
             "type": "message_event",
             "event": "conversation_started",
             "data": {
-                "conversation_id": f"mock-{datetime.now().timestamp()}",
-                "session_id": f"session-{datetime.now().timestamp()}"
+                "conversation_id": conversation_id,
+                "session_id": session_id
             }
         })
 
-        segment_counter = 0
+        # Get STT service and model for language
+        stt_service, stt_language, model = get_stt_service_for_language(language)
+        print(f"Using {stt_service} with language {stt_language} and model {model}")
 
+        # Stream transcript callback
+        def stream_transcript(segments):
+            for segment in segments:
+                # Send segment to client
+                asyncio.create_task(websocket.send_json({
+                    "type": "message_event",
+                    "event": "segment_received",
+                    "data": {
+                        "segment": {
+                            "text": segment["text"],
+                            "speaker": segment["speaker"],
+                            "speaker_id": int(segment["speaker"].split("_")[-1]) if "_" in segment["speaker"] else 0,
+                            "is_user": segment["is_user"],
+                            "start": segment["start"],
+                            "end": segment["end"],
+                            "confidence": 0.95  # Default confidence
+                        },
+                        "session_id": session_id
+                    }
+                }))
+
+        # Initialize STT connection based on service
+        if stt_service == STTService.deepgram:
+            stt_socket = await process_audio_dg(
+                stream_transcript=stream_transcript,
+                language=stt_language,
+                sample_rate=sample_rate,
+                channels=channels,
+                model=model
+            )
+        else:
+            # Fallback to Deepgram if other services not available
+            stt_socket = await process_audio_dg(
+                stream_transcript=stream_transcript,
+                language="en",
+                sample_rate=sample_rate,
+                channels=channels,
+                model="nova-2-general"
+            )
+
+        # Audio processing loop
         while True:
             try:
-                # Receive audio data
+                # Receive audio data from client
                 data = await websocket.receive()
 
                 if data["type"] == "websocket.receive":
                     if "bytes" in data:
-                        # Mock transcription response after receiving audio
-                        segment_counter += 1
-
-                        # Send mock transcript segment
-                        mock_segment = {
-                            "type": "message_event",
-                            "event": "segment_received",
-                            "data": {
-                                "segment": {
-                                    "text": f"Mock transcribed audio segment {segment_counter}",
-                                    "speaker": "SPEAKER_0",
-                                    "speaker_id": 0,
-                                    "is_user": True,
-                                    "start": segment_counter * 2.0,
-                                    "end": (segment_counter * 2.0) + 1.8,
-                                    "confidence": 0.95
-                                },
-                                "session_id": f"session-{datetime.now().timestamp()}"
-                            }
-                        }
-
-                        await websocket.send_json(mock_segment)
+                        # Send audio data to STT service
+                        audio_data = data["bytes"]
+                        if stt_socket and hasattr(stt_socket, 'send'):
+                            stt_socket.send(audio_data)
 
                     elif "text" in data:
                         # Handle text messages (like heartbeat)
@@ -288,52 +325,108 @@ async def websocket_transcribe(
 
     except WebSocketDisconnect:
         print("WebSocket disconnected")
+        if 'stt_socket' in locals() and stt_socket:
+            try:
+                stt_socket.finish()
+            except:
+                pass
     except Exception as e:
         print(f"WebSocket error: {e}")
         try:
             await websocket.close(code=1011, reason="Internal server error")
         except:
             pass
+        if 'stt_socket' in locals() and stt_socket:
+            try:
+                stt_socket.finish()
+            except:
+                pass
 
 @app.post("/v1/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     """
-    Simple audio file transcription endpoint (mock for testing)
-    In production, this would use Deepgram/Whisper/etc.
+    Audio file transcription endpoint using Deepgram (no auth required)
     """
     try:
         # Read the uploaded audio file
         audio_content = await file.read()
 
-        # Mock transcription result
-        mock_transcript = [
-            {
-                "text": "This is a mock transcription of your audio file.",
-                "speaker": "SPEAKER_0",
-                "speaker_id": 0,
-                "start": 0.0,
-                "end": 3.0,
-                "confidence": 0.95
-            },
-            {
-                "text": "The AI processing will work on this mock transcript.",
-                "speaker": "SPEAKER_0",
-                "speaker_id": 0,
-                "start": 3.0,
-                "end": 6.0,
-                "confidence": 0.92
-            }
-        ]
+        # Use Deepgram for file transcription
+        if not os.getenv('DEEPGRAM_API_KEY'):
+            raise HTTPException(status_code=500, detail="Deepgram API key not configured")
+
+        # Initialize Deepgram client for file transcription
+        dg_client = deepgram.listen.prerecorded.v("1")
+
+        # Transcription options
+        options = {
+            "model": "nova-2-general",
+            "language": "en",
+            "smart_format": True,
+            "diarize": True,
+            "punctuate": True,
+            "paragraphs": True,
+        }
+
+        # Call Deepgram API
+        response = dg_client.transcribe_file(
+            source={"buffer": audio_content},
+            options=options
+        )
+
+        # Extract transcript segments
+        transcript_segments = []
+        if response.results and response.results.channels:
+            channel = response.results.channels[0]
+            if channel.alternatives:
+                alternative = channel.alternatives[0]
+
+                # Process paragraphs if available
+                if hasattr(alternative, 'paragraphs') and alternative.paragraphs:
+                    for paragraph in alternative.paragraphs.paragraphs:
+                        for sentence in paragraph.sentences:
+                            transcript_segments.append({
+                                "text": sentence.text,
+                                "speaker": f"SPEAKER_{sentence.speaker if hasattr(sentence, 'speaker') else 0}",
+                                "speaker_id": sentence.speaker if hasattr(sentence, 'speaker') else 0,
+                                "start": sentence.start,
+                                "end": sentence.end,
+                                "confidence": sentence.confidence if hasattr(sentence, 'confidence') else 0.95
+                            })
+                # Fallback to words if paragraphs not available
+                elif hasattr(alternative, 'words') and alternative.words:
+                    current_segment = None
+                    for word in alternative.words:
+                        speaker_id = word.speaker if hasattr(word, 'speaker') else 0
+
+                        if current_segment is None or current_segment["speaker_id"] != speaker_id:
+                            if current_segment:
+                                transcript_segments.append(current_segment)
+                            current_segment = {
+                                "text": word.punctuated_word,
+                                "speaker": f"SPEAKER_{speaker_id}",
+                                "speaker_id": speaker_id,
+                                "start": word.start,
+                                "end": word.end,
+                                "confidence": word.confidence if hasattr(word, 'confidence') else 0.95
+                            }
+                        else:
+                            current_segment["text"] += f" {word.punctuated_word}"
+                            current_segment["end"] = word.end
+
+                    if current_segment:
+                        transcript_segments.append(current_segment)
 
         return {
             "success": True,
-            "transcript": mock_transcript,
+            "transcript": transcript_segments,
             "language": "en",
-            "duration": 6.0,
-            "note": "This is a mock transcription for testing. Real STT requires audio processing setup."
+            "duration": response.results.summary.total_time if response.results and hasattr(response.results, 'summary') else 0.0,
+            "note": "Transcribed using Deepgram API"
         }
 
     except Exception as e:
+        print(f"Transcription error: {e}")
         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
 
 # Create necessary directories
