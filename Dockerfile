@@ -1,20 +1,17 @@
-FROM python:3.11 AS builder
-
-ENV PATH="/opt/venv/bin:$PATH"
-RUN python -m venv /opt/venv
-
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir --upgrade -r /tmp/requirements.txt
-
 FROM python:3.11-slim
 
 WORKDIR /app
-ENV PATH="/opt/venv/bin:$PATH"
 
+# Install system dependencies
 RUN apt-get update && apt-get -y install ffmpeg curl unzip && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /opt/venv /opt/venv
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application
 COPY . .
 
 EXPOSE 8080
-CMD ["python", "simple_server.py"]
+
+CMD sh -c "uvicorn test_simple:app --host 0.0.0.0 --port ${PORT:-8080} --reload"
