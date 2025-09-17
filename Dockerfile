@@ -19,4 +19,4 @@ RUN find . -name "*.pyc" -delete
 RUN find . -name "__pycache__" -delete
 
 # Explicitly start the no-auth AI backend with full features
-CMD python -c "import railway_noauth; print('Starting railway_noauth.py'); import uvicorn; uvicorn.run('railway_noauth:app', host='0.0.0.0', port=8080)"
+CMD python -c "import app_noauth; print('Starting app_noauth.py - Full AI Backend No Auth'); import uvicorn; uvicorn.run('app_noauth:app', host='0.0.0.0', port=8080)"
