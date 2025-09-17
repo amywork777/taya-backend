@@ -14,5 +14,5 @@ COPY . .
 
 EXPOSE 8080
 
-# Force start test_simple FastAPI server (no auth)
-CMD ["uvicorn", "test_simple:app", "--host", "0.0.0.0", "--port", "8080"]
+# Force start AI-enabled no-auth FastAPI server
+CMD ["uvicorn", "railway_noauth:app", "--host", "0.0.0.0", "--port", "8080"]
