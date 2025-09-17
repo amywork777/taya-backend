@@ -50,7 +50,7 @@ MOCK_USER_ID = "test-user-no-auth"
 
 @app.get("/")
 def read_root():
-    return {"message": "Taya Backend - AI Processing No Auth!", "status": "healthy"}
+    return {"message": "Taya Backend - AI Processing No Auth (v2)!", "status": "healthy"}
 
 @app.get("/health")
 def health_check():
