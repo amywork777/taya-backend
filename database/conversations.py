@@ -11,6 +11,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
 from database import users as users_db
+from database.supabase_client import supabase
 from models.conversation import ConversationPhoto, PostProcessingStatus, PostProcessingModel, ConversationStatus
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
@@ -159,6 +160,20 @@ def upsert_conversation(uid: str, conversation_data: dict):
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversation(uid, conversation_id):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        try:
+            result = (
+                supabase.table('conversations')
+                .select('*')
+                .eq('uid', uid)
+                .eq('id', conversation_id)
+                .single()
+                .execute()
+            )
+            return result.data if result and getattr(result, 'data', None) else None
+        except Exception as e:
+            print('supabase get_conversation error', e)
+            return None
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_data = conversation_ref.get().to_dict()
@@ -180,6 +195,31 @@ def get_conversations(
     # Supabase/no-auth mode fallback: return empty list instead of erroring on Firestore-only APIs
     if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
         return []
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        try:
+            q = supabase.table('conversations').select('*').eq('uid', uid)
+            if not include_discarded:
+                q = q.eq('discarded', False)
+            if statuses:
+                q = q.in_('status', statuses)
+            if categories:
+                q = q.in_('structured->>category', categories)  # if stored as JSONB
+            if start_date:
+                q = q.gte('created_at', start_date.isoformat())
+            if end_date:
+                q = q.lte('created_at', end_date.isoformat())
+            q = q.order('created_at', desc=True)
+            # Apply pagination if supported
+            try:
+                q = q.range(offset, max(0, offset + limit - 1))
+            except Exception:
+                pass
+            result = q.execute()
+            return result.data or []
+        except Exception as e:
+            print('supabase get_conversations error', e)
+            return []
+
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
