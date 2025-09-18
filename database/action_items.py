@@ -2,8 +2,10 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+import os
 
 from ._client import db
+from database.supabase_client import supabase
 
 
 # Collection name
@@ -65,6 +67,17 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
     """
     action_item_data = _prepare_action_item_for_write(action_item_data)
 
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        data = _prepare_action_item_for_write(action_item_data.copy())
+        now = datetime.now(timezone.utc).isoformat()
+        data.setdefault('created_at', now)
+        data.setdefault('updated_at', now)
+        if data.get('completed', False) and not data.get('completed_at'):
+            data['completed_at'] = now
+        data['uid'] = uid
+        res = supabase.table('action_items').insert(data).execute()
+        return (res.data[0]['id'] if res.data else None)
+
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
 
@@ -95,6 +108,20 @@ def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[s
     """
     if not action_items_data:
         return []
+
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        now = datetime.now(timezone.utc).isoformat()
+        rows = []
+        for item in action_items_data:
+            data = _prepare_action_item_for_write(item.copy())
+            data.setdefault('created_at', now)
+            data.setdefault('updated_at', now)
+            if data.get('completed', False) and not data.get('completed_at'):
+                data['completed_at'] = now
+            data['uid'] = uid
+            rows.append(data)
+        res = supabase.table('action_items').insert(rows).execute()
+        return [r['id'] for r in (res.data or [])]
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
@@ -140,6 +167,13 @@ def get_action_item(uid: str, action_item_id: str) -> Optional[dict]:
     Returns:
         Action item data or None if not found
     """
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        res = supabase.table('action_items').select('*').eq('uid', uid).eq('id', action_item_id).single().execute()
+        if not res or not getattr(res, 'data', None):
+            return None
+        data = res.data
+        return _prepare_action_item_for_read(data)
+
     user_ref = db.collection('users').document(uid)
     action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
     doc = action_item_ref.get()
@@ -176,6 +210,45 @@ def get_action_items(
     Returns:
         List of action items
     """
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        q = supabase.table('action_items').select('*').eq('uid', uid)
+        if conversation_id is not None:
+            q = q.eq('conversation_id', conversation_id)
+        if completed is not None:
+            q = q.eq('completed', completed)
+        q = q.order('created_at', desc=True)
+        try:
+            if limit is not None:
+                q = q.range(offset, max(0, offset + (limit or 0) - 1))
+        except Exception:
+            pass
+        res = q.execute()
+        items = []
+        for data in (res.data or []):
+            ai = _prepare_action_item_for_read(data)
+            # Manual date filters if provided
+            if start_date is not None or end_date is not None:
+                created_at = ai.get('created_at')
+                due_at = ai.get('due_at')
+                in_range = False
+                if created_at is not None:
+                    if (start_date is None or created_at >= start_date) and (end_date is None or created_at <= end_date):
+                        in_range = True
+                if not in_range and due_at is not None:
+                    if (start_date is None or due_at >= start_date) and (end_date is None or due_at <= end_date):
+                        in_range = True
+                if not in_range:
+                    continue
+            items.append(ai)
+        items.sort(
+            key=lambda x: (
+                x.get('due_at') is None,
+                x.get('due_at') or datetime.max.replace(tzinfo=timezone.utc),
+                -(x.get('created_at', datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
+            )
+        )
+        return items
+
     user_ref = db.collection('users').document(uid)
     query = user_ref.collection(action_items_collection)
 
@@ -281,6 +354,12 @@ def update_action_item(uid: str, action_item_id: str, update_data: dict) -> bool
     # Prepare data
     update_data = _prepare_action_item_for_write(update_data)
 
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        update = _prepare_action_item_for_write(update_data.copy())
+        update['updated_at'] = datetime.now(timezone.utc).isoformat()
+        res = supabase.table('action_items').update(update).eq('uid', uid).eq('id', action_item_id).execute()
+        return bool(res and getattr(res, 'data', None))
+
     user_ref = db.collection('users').document(uid)
     action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
 
@@ -329,6 +408,10 @@ def delete_action_item(uid: str, action_item_id: str) -> bool:
     Returns:
         True if deleted successfully, False otherwise
     """
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        res = supabase.table('action_items').delete().eq('uid', uid).eq('id', action_item_id).execute()
+        return bool(res and getattr(res, 'data', None))
+
     user_ref = db.collection('users').document(uid)
     action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
 
@@ -353,6 +436,11 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     Returns:
         Number of deleted items
     """
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        res = supabase.table('action_items').delete().eq('uid', uid).eq('conversation_id', conversation_id).execute()
+        # supabase returns deleted rows
+        return len(res.data or [])
+
     user_ref = db.collection('users').document(uid)
     query = user_ref.collection(action_items_collection).where(
         filter=FieldFilter('conversation_id', '==', conversation_id)
@@ -376,6 +464,11 @@ def unlock_all_action_items(uid: str):
     """
     Finds all action items for a user with is_locked: True and updates them to is_locked = False.
     """
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        supabase.table('action_items').update({'is_locked': False}).eq('uid', uid).eq('is_locked', True).execute()
+        print(f"Unlocked all action items for user {uid}")
+        return
+
     action_items_ref = db.collection('users').document(uid).collection(action_items_collection)
     locked_items_query = action_items_ref.where(filter=FieldFilter('is_locked', '==', True))
 
