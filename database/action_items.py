@@ -238,20 +238,32 @@ def get_action_items(
         List of action items
     """
     if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
-        q = supabase.table('action_items').select('*').eq('uid', uid)
+        try:
+            q = supabase.table('action_items').select('*').eq('uid', uid)
+        except Exception as e:
+            raise Exception(f"Supabase select builder error: {str(e)}")
         if conversation_id is not None:
             q = q.eq('conversation_id', conversation_id)
         if completed is not None:
             q = q.eq('completed', completed)
-        q = q.order('created_at', desc=True)
+        try:
+            q = q.order('created_at', desc=True)
+        except Exception as e:
+            raise Exception(f"Supabase order error: {str(e)}")
         try:
             if limit is not None:
                 q = q.range(offset, max(0, offset + (limit or 0) - 1))
         except Exception:
             pass
-        res = q.execute()
+        try:
+            res = q.execute()
+        except Exception as e:
+            raise Exception(f"Supabase execute error: {str(e)}")
         items = []
-        for data in (res.data or []):
+        rows = res.data or []
+        if not isinstance(rows, list):
+            raise Exception(f"Supabase returned non-list data: {type(rows)} {rows}")
+        for data in rows:
             ai = _prepare_action_item_for_read(data)
             # Manual date filters if provided
             if start_date is not None or end_date is not None:

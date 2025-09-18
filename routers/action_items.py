@@ -123,16 +123,21 @@ def get_action_items(
 
     has_more = len(action_items) == limit
     if has_more:
-        next_batch = action_items_db.get_action_items(
-            uid=uid,
-            conversation_id=conversation_id,
-            completed=completed,
-            start_date=start_date,
-            end_date=end_date,
-            limit=1,
-            offset=offset + limit,
-        )
-        has_more = len(next_batch) > 0
+        try:
+            next_batch = action_items_db.get_action_items(
+                uid=uid,
+                conversation_id=conversation_id,
+                completed=completed,
+                start_date=start_date,
+                end_date=end_date,
+                limit=1,
+                offset=offset + limit,
+            )
+            has_more = len(next_batch) > 0
+        except Exception as e:
+            if os.getenv('SUPABASE_DEBUG', 'false').lower() == 'true':
+                raise HTTPException(status_code=400, detail=f"Supabase list(has_more) error: {str(e)}")
+            has_more = False
 
     return {"action_items": response_items, "has_more": has_more}
 
