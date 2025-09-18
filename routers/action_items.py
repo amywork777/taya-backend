@@ -63,8 +63,13 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
         'conversation_id': request.conversation_id,
     }
 
-    action_item_id = action_items_db.create_action_item(uid, action_item_data)
-    action_item = action_items_db.get_action_item(uid, action_item_id)
+    try:
+        action_item_id = action_items_db.create_action_item(uid, action_item_data)
+        action_item = action_items_db.get_action_item(uid, action_item_id)
+    except Exception as e:
+        if os.getenv('SUPABASE_DEBUG', 'false').lower() == 'true':
+            raise HTTPException(status_code=400, detail=f"Supabase error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create action item")
 
     if not action_item:
         raise HTTPException(status_code=500, detail="Failed to create action item")

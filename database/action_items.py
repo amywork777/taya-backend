@@ -83,7 +83,9 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
         data.setdefault('id', str(uuid.uuid4()))
         data['uid'] = uid
         res = supabase.table('action_items').insert(data).execute()
-        return (res.data[0]['id'] if res.data else None)
+        if not res or not getattr(res, 'data', None):
+            raise Exception(f"Supabase insert failed for action_items: {getattr(res, 'error', None) or res}")
+        return res.data[0].get('id')
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
@@ -133,7 +135,9 @@ def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[s
             data['uid'] = uid
             rows.append(data)
         res = supabase.table('action_items').insert(rows).execute()
-        return [r['id'] for r in (res.data or [])]
+        if not res or not getattr(res, 'data', None):
+            raise Exception(f"Supabase batch insert failed for action_items: {getattr(res, 'error', None) or res}")
+        return [r.get('id') for r in (res.data or [])]
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
