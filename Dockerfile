@@ -7,7 +7,7 @@ RUN apt-get update && apt-get -y install ffmpeg curl unzip git gcc build-essenti
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY . .
@@ -19,4 +19,4 @@ RUN find . -name "*.pyc" -delete
 RUN find . -name "__pycache__" -delete
 
 # Start Supabase-powered backend with no auth
-CMD ["python", "railway_supabase_noauth.py"]
+CMD ["python", "main_noauth.py"]

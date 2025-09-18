@@ -183,6 +183,10 @@ def health_check_v1():
 
 print("🎉 Taya Backend - Supabase No Auth - Ready!")
 
+@app.get("/test-deployment-working")
+def test_deployment():
+    return {"message": "Supabase no-auth deployment is working!", "file": "main_noauth.py", "version": "3.1.0"}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
