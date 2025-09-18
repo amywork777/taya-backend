@@ -14,6 +14,9 @@ detection_cache = OrderedDict()
 MAX_DETECTION_CACHE_SIZE = 1000
 
 PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT")
+_disable_gcp = os.getenv('DISABLE_FIREBASE', 'false').lower() == 'true' or (
+    os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY')
+)
 
 # A set of common English non-lexical utterances that can confuse language detectors.
 # This list helps prevent misclassification of short, ambiguous sounds.
@@ -113,14 +116,24 @@ _non_lexical_utterances_pattern = re.compile(
 
 # Initialize the translation client globally
 import json
-if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-    from google.oauth2 import service_account
-    credentials = service_account.Credentials.from_service_account_info(service_account_info)
-    _client = translate_v3.TranslationServiceClient(credentials=credentials)
+if _disable_gcp:
+    _client = None
 else:
-    _client = translate_v3.TranslationServiceClient()
-_parent = f"projects/{PROJECT_ID}/locations/global"
+    service_account_raw = os.environ.get("SERVICE_ACCOUNT_JSON", "")
+    if service_account_raw:
+        try:
+            service_account_info = json.loads(service_account_raw)
+        except Exception:
+            service_account_info = None
+        if service_account_info:
+            from google.oauth2 import service_account
+            credentials = service_account.Credentials.from_service_account_info(service_account_info)
+            _client = translate_v3.TranslationServiceClient(credentials=credentials)
+        else:
+            _client = translate_v3.TranslationServiceClient()
+    else:
+        _client = translate_v3.TranslationServiceClient()
+_parent = f"projects/{PROJECT_ID}/locations/global" if PROJECT_ID else ""
 _mime_type = "text/plain"
 
 # Initialize langdetect for consistent results
@@ -195,6 +208,8 @@ def _detect_with_langdetect(text: str, hint_language: str = None) -> str | None:
 
 def _detect_with_google_cloud(text: str) -> str | None:
     """Helper function to detect language using Google Cloud API."""
+    if _client is None or not _parent:
+        return None
     response = _client.detect_language(parent=_parent, content=text, mime_type=_mime_type)
     if response.languages and len(response.languages) > 0:
         for language in response.languages:
@@ -302,14 +317,16 @@ class TranslationService:
 
         try:
             # Not in cache, perform translation
-            response = _client.translate_text(
-                contents=[text],
-                parent=_parent,
-                mime_type=_mime_type,
-                target_language_code=dest_language,
-            )
-
-            translated_text = response.translations[0].translated_text
+            if _client is None or not _parent:
+                translated_text = text
+            else:
+                response = _client.translate_text(
+                    contents=[text],
+                    parent=_parent,
+                    mime_type=_mime_type,
+                    target_language_code=dest_language,
+                )
+                translated_text = response.translations[0].translated_text
 
             # Add to cache
             if len(self.translation_cache) >= self.MAX_CACHE_SIZE:
