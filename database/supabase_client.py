@@ -11,7 +11,7 @@ from supabase import create_client, Client
 def get_supabase_client() -> Client:
     """Get or create Supabase client"""
     url = os.getenv('SUPABASE_URL')
-    key = os.getenv('SUPABASE_ANON_KEY')
+    key = os.getenv('SUPABASE_SERVICE_ROLE_KEY') or os.getenv('SUPABASE_ANON_KEY')
 
     if not url or not key:
         # For testing, use mock values
