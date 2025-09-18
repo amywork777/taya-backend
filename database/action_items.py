@@ -69,11 +69,16 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
 
     if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
         data = _prepare_action_item_for_write(action_item_data.copy())
-        now = datetime.now(timezone.utc).isoformat()
-        data.setdefault('created_at', now)
-        data.setdefault('updated_at', now)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        data.setdefault('created_at', now_iso)
+        data.setdefault('updated_at', now_iso)
         if data.get('completed', False) and not data.get('completed_at'):
-            data['completed_at'] = now
+            data['completed_at'] = now_iso
+        # Convert datetimes to ISO strings
+        for k in ['created_at', 'updated_at', 'due_at', 'completed_at']:
+            v = data.get(k)
+            if hasattr(v, 'isoformat'):
+                data[k] = v.isoformat()
         data['uid'] = uid
         res = supabase.table('action_items').insert(data).execute()
         return (res.data[0]['id'] if res.data else None)
@@ -110,14 +115,18 @@ def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[s
         return []
 
     if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
-        now = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(timezone.utc).isoformat()
         rows = []
         for item in action_items_data:
             data = _prepare_action_item_for_write(item.copy())
-            data.setdefault('created_at', now)
-            data.setdefault('updated_at', now)
+            data.setdefault('created_at', now_iso)
+            data.setdefault('updated_at', now_iso)
             if data.get('completed', False) and not data.get('completed_at'):
-                data['completed_at'] = now
+                data['completed_at'] = now_iso
+            for k in ['created_at', 'updated_at', 'due_at', 'completed_at']:
+                v = data.get(k)
+                if hasattr(v, 'isoformat'):
+                    data[k] = v.isoformat()
             data['uid'] = uid
             rows.append(data)
         res = supabase.table('action_items').insert(rows).execute()
@@ -357,6 +366,10 @@ def update_action_item(uid: str, action_item_id: str, update_data: dict) -> bool
     if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
         update = _prepare_action_item_for_write(update_data.copy())
         update['updated_at'] = datetime.now(timezone.utc).isoformat()
+        for k in ['updated_at', 'due_at', 'completed_at']:
+            v = update.get(k)
+            if hasattr(v, 'isoformat'):
+                update[k] = v.isoformat()
         res = supabase.table('action_items').update(update).eq('uid', uid).eq('id', action_item_id).execute()
         return bool(res and getattr(res, 'data', None))
 
