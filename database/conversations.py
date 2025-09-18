@@ -3,6 +3,7 @@ import json
 import uuid
 import zlib
 from datetime import datetime, timedelta, timezone
+import os
 from typing import List, Tuple, Optional, Dict, Any
 
 from google.cloud import firestore
@@ -176,6 +177,9 @@ def get_conversations(
     end_date: Optional[datetime] = None,
     categories: Optional[List[str]] = None,
 ):
+    # Supabase/no-auth mode fallback: return empty list instead of erroring on Firestore-only APIs
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        return []
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
