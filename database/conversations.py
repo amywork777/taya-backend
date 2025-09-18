@@ -246,6 +246,17 @@ def get_conversations(
 
 
 def update_conversation(uid: str, conversation_id: str, update_data: dict):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        # Fetch doc_level if needed for encryption
+        try:
+            res = supabase.table('conversations').select('data_protection_level').eq('uid', uid).eq('id', conversation_id).single().execute()
+            level = (res.data or {}).get('data_protection_level', 'standard') if res else 'standard'
+            prepared = _prepare_conversation_for_write(update_data, uid, level)
+            supabase.table('conversations').update(prepared).eq('uid', uid).eq('id', conversation_id).execute()
+            return
+        except Exception as e:
+            print('supabase update_conversation error', e)
+            return
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     doc_snapshot = doc_ref.get()
     if not doc_snapshot.exists:
@@ -257,6 +268,16 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
 
 
 def update_conversation_title(uid: str, conversation_id: str, title: str):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        # structured is JSON; update title inside structured
+        # Fetch, modify, then update to keep compatibility
+        res = supabase.table('conversations').select('structured').eq('uid', uid).eq('id', conversation_id).single().execute()
+        if not res or not getattr(res, 'data', None):
+            return
+        structured = res.data.get('structured') or {}
+        structured['title'] = title
+        supabase.table('conversations').update({'structured': structured}).eq('uid', uid).eq('id', conversation_id).execute()
+        return
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
 
@@ -462,6 +483,15 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
 
 
 def update_conversation_events(uid: str, conversation_id: str, events: List[dict]):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        # Fetch structured JSON, set events, then update
+        res = supabase.table('conversations').select('structured').eq('uid', uid).eq('id', conversation_id).single().execute()
+        if not res or not getattr(res, 'data', None):
+            return
+        structured = res.data.get('structured') or {}
+        structured['events'] = events
+        supabase.table('conversations').update({'structured': structured}).eq('uid', uid).eq('id', conversation_id).execute()
+        return
     update_conversation(uid, conversation_id, {'structured.events': events})
 
 
@@ -608,6 +638,9 @@ def update_conversation_segments(uid: str, conversation_id: str, segments: List[
 
 
 def set_conversation_visibility(uid: str, conversation_id: str, visibility: str):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        supabase.table('conversations').update({'visibility': visibility}).eq('uid', uid).eq('id', conversation_id).execute()
+        return
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'visibility': visibility})
