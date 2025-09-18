@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import uuid
 from typing import Optional, List, Dict, Any
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -79,6 +80,7 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
             v = data.get(k)
             if hasattr(v, 'isoformat'):
                 data[k] = v.isoformat()
+        data.setdefault('id', str(uuid.uuid4()))
         data['uid'] = uid
         res = supabase.table('action_items').insert(data).execute()
         return (res.data[0]['id'] if res.data else None)
@@ -127,6 +129,7 @@ def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[s
                 v = data.get(k)
                 if hasattr(v, 'isoformat'):
                     data[k] = v.isoformat()
+            data.setdefault('id', str(uuid.uuid4()))
             data['uid'] = uid
             rows.append(data)
         res = supabase.table('action_items').insert(rows).execute()
