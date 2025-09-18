@@ -1,15 +1,23 @@
 from fastapi import Depends, HTTPException, Security
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
-from firebase_admin import auth
+import os
 
 import database.mcp_api_key as mcp_api_key_db
 
 bearer_scheme = HTTPBearer()
 
 
+_disable_firebase = os.getenv('DISABLE_FIREBASE', 'false').lower() == 'true'
+if not _disable_firebase:
+    from firebase_admin import auth  # type: ignore
+
+
 async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
 ) -> str:
+    if _disable_firebase:
+        return os.getenv('MOCK_USER_ID', 'noauth-user-12345')
+
     if not credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
@@ -34,5 +42,7 @@ async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> s
     token = api_key.replace("Bearer ", "")
     user_id = mcp_api_key_db.get_user_id_by_api_key(token)
     if not user_id:
+        if _disable_firebase:
+            return os.getenv('MOCK_USER_ID', 'noauth-user-12345')
         raise HTTPException(status_code=401, detail="Invalid API Key")
     return user_id

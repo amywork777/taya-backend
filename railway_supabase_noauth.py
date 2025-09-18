@@ -33,6 +33,8 @@ def mock_get_current_user_uid(authorization: str = Header(None)):
 # Configure environment variables to allow ADMIN_KEY bypass if any code paths rely on it
 os.environ['LOCAL_DEVELOPMENT'] = 'true'
 os.environ['ADMIN_KEY'] = 'BYPASS_AUTH_'
+os.environ['DISABLE_FIREBASE'] = 'true'
+os.environ['MOCK_USER_ID'] = MOCK_USER_ID
 print("🔧 Environment variables set for auth bypass")
 
 # Import FastAPI and routers

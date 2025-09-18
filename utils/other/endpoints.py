@@ -4,34 +4,48 @@ import time
 
 from fastapi import Header, HTTPException
 from fastapi import Request
-from firebase_admin import auth
-from firebase_admin.auth import InvalidIdTokenError
 
 
-def get_user(uid: str):
-    user = auth.get_user(uid)
-    return user
+# Allow deployments to disable Firebase entirely
+_disable_firebase = os.getenv('DISABLE_FIREBASE', 'false').lower() == 'true'
 
+if _disable_firebase:
+    def get_user(uid: str):
+        return {"uid": uid}
 
-def get_current_user_uid(authorization: str = Header(None)):
-    if authorization and os.getenv('ADMIN_KEY') in authorization:
-        return authorization.split(os.getenv('ADMIN_KEY'))[1]
+    def get_current_user_uid(authorization: str = Header(None)):
+        admin_key = os.getenv('ADMIN_KEY')
+        if authorization and admin_key and admin_key in authorization:
+            return authorization.split(admin_key)[1]
+        # In disabled mode, return mock user without validating token
+        return os.getenv('MOCK_USER_ID', 'noauth-user-12345')
+else:
+    from firebase_admin import auth
+    from firebase_admin.auth import InvalidIdTokenError
 
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Authorization header not found")
-    elif len(str(authorization).split(' ')) != 2:
-        raise HTTPException(status_code=401, detail="Invalid authorization token")
+    def get_user(uid: str):
+        user = auth.get_user(uid)
+        return user
 
-    try:
-        token = authorization.split(' ')[1]
-        decoded_token = auth.verify_id_token(token)
-        # print('get_current_user_uid', decoded_token['uid'])
-        return decoded_token['uid']
-    except InvalidIdTokenError as e:
-        if os.getenv('LOCAL_DEVELOPMENT') == 'true':
-            return '123'
-        print(e)
-        raise HTTPException(status_code=401, detail="Invalid authorization token")
+    def get_current_user_uid(authorization: str = Header(None)):
+        if authorization and os.getenv('ADMIN_KEY') in authorization:
+            return authorization.split(os.getenv('ADMIN_KEY'))[1]
+
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Authorization header not found")
+        elif len(str(authorization).split(' ')) != 2:
+            raise HTTPException(status_code=401, detail="Invalid authorization token")
+
+        try:
+            token = authorization.split(' ')[1]
+            decoded_token = auth.verify_id_token(token)
+            # print('get_current_user_uid', decoded_token['uid'])
+            return decoded_token['uid']
+        except InvalidIdTokenError as e:
+            if os.getenv('LOCAL_DEVELOPMENT') == 'true':
+                return '123'
+            print(e)
+            raise HTTPException(status_code=401, detail="Invalid authorization token")
 
 
 cached = {}
