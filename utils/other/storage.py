@@ -3,18 +3,36 @@ import json
 import os
 from typing import List
 
-from google.cloud import storage
-from google.oauth2 import service_account
-from google.cloud.storage import transfer_manager
+_disable_gcs = os.getenv('DISABLE_FIREBASE', 'false').lower() == 'true' or (
+    os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY')
+)
+
+if not _disable_gcs:
+    from google.cloud import storage
+    from google.oauth2 import service_account
+    from google.cloud.storage import transfer_manager
+else:
+    storage = None
+    transfer_manager = None
 
 from database.redis_db import cache_signed_url, get_cached_signed_url
 
-if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-    credentials = service_account.Credentials.from_service_account_info(service_account_info)
-    storage_client = storage.Client(credentials=credentials)
+if not _disable_gcs:
+    service_account_raw = os.environ.get('SERVICE_ACCOUNT_JSON', '')
+    if service_account_raw:
+        try:
+            service_account_info = json.loads(service_account_raw)
+        except Exception:
+            service_account_info = None
+        if service_account_info:
+            credentials = service_account.Credentials.from_service_account_info(service_account_info)
+            storage_client = storage.Client(credentials=credentials)
+        else:
+            storage_client = storage.Client()
+    else:
+        storage_client = storage.Client()
 else:
-    storage_client = storage.Client()
+    storage_client = None
 
 speech_profiles_bucket = os.getenv('BUCKET_SPEECH_PROFILES')
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
@@ -29,6 +47,8 @@ chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 # ************* SPEECH PROFILE **************
 # *******************************************
 def upload_profile_audio(file_path: str, uid: str):
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(speech_profiles_bucket)
     path = f'{uid}/speech_profile.wav'
     blob = bucket.blob(path)
@@ -37,12 +57,16 @@ def upload_profile_audio(file_path: str, uid: str):
 
 
 def get_user_has_speech_profile(uid: str) -> bool:
+    if _disable_gcs or not storage_client:
+        return False
     bucket = storage_client.bucket(speech_profiles_bucket)
     blob = bucket.blob(f'{uid}/speech_profile.wav')
     return blob.exists()
 
 
 def get_profile_audio_if_exists(uid: str, download: bool = True) -> str:
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(speech_profiles_bucket)
     path = f'{uid}/speech_profile.wav'
     blob = bucket.blob(path)
@@ -57,6 +81,8 @@ def get_profile_audio_if_exists(uid: str, download: bool = True) -> str:
 
 
 def upload_additional_profile_audio(file_path: str, uid: str) -> None:
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(speech_profiles_bucket)
     path = f'{uid}/additional_profile_recordings/{file_path.split("/")[-1]}'
     blob = bucket.blob(path)
@@ -64,6 +90,8 @@ def upload_additional_profile_audio(file_path: str, uid: str) -> None:
 
 
 def delete_additional_profile_audio(uid: str, file_name: str) -> None:
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(speech_profiles_bucket)
     blob = bucket.blob(f'{uid}/additional_profile_recordings/{file_name}')
     if blob.exists():
@@ -72,6 +100,8 @@ def delete_additional_profile_audio(uid: str, file_name: str) -> None:
 
 
 def get_additional_profile_recordings(uid: str, download: bool = False) -> List[str]:
+    if _disable_gcs or not storage_client:
+        return []
     bucket = storage_client.bucket(speech_profiles_bucket)
     blobs = bucket.list_blobs(prefix=f'{uid}/additional_profile_recordings/')
     if download:
@@ -144,6 +174,8 @@ def get_user_person_speech_samples(uid: str, person_id: str, download: bool = Fa
 # ************* POST PROCESSING **************
 # ********************************************
 def upload_postprocessing_audio(file_path: str):
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(postprocessing_audio_bucket)
     blob = bucket.blob(file_path)
     blob.upload_from_filename(file_path)
@@ -151,6 +183,8 @@ def upload_postprocessing_audio(file_path: str):
 
 
 def delete_postprocessing_audio(file_path: str):
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(postprocessing_audio_bucket)
     blob = bucket.blob(file_path)
     blob.delete()
@@ -162,6 +196,8 @@ def delete_postprocessing_audio(file_path: str):
 
 
 def upload_sdcard_audio(file_path: str):
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(postprocessing_audio_bucket)
     blob = bucket.blob(file_path)
     blob.upload_from_filename(file_path)
@@ -169,6 +205,8 @@ def upload_sdcard_audio(file_path: str):
 
 
 def download_postprocessing_audio(file_path: str, destination_file_path: str):
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(postprocessing_audio_bucket)
     blob = bucket.blob(file_path)
     blob.download_to_filename(destination_file_path)
@@ -180,6 +218,8 @@ def download_postprocessing_audio(file_path: str, destination_file_path: str):
 
 
 def upload_conversation_recording(file_path: str, uid: str, conversation_id: str):
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(memories_recordings_bucket)
     path = f'{uid}/{conversation_id}.wav'
     blob = bucket.blob(path)
@@ -189,6 +229,8 @@ def upload_conversation_recording(file_path: str, uid: str, conversation_id: str
 
 def get_conversation_recording_if_exists(uid: str, memory_id: str) -> str:
     print('get_conversation_recording_if_exists', uid, memory_id)
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(memories_recordings_bucket)
     path = f'{uid}/{memory_id}.wav'
     blob = bucket.blob(path)
@@ -200,7 +242,7 @@ def get_conversation_recording_if_exists(uid: str, memory_id: str) -> str:
 
 
 def delete_all_conversation_recordings(uid: str):
-    if not uid:
+    if not uid or _disable_gcs or not storage_client:
         return
     bucket = storage_client.bucket(memories_recordings_bucket)
     blobs = bucket.list_blobs(prefix=uid)
@@ -212,6 +254,8 @@ def delete_all_conversation_recordings(uid: str):
 # ************* SYNCING FILES **************
 # ********************************************
 def get_syncing_file_temporal_url(file_path: str):
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
     blob.upload_from_filename(file_path)
@@ -219,6 +263,8 @@ def get_syncing_file_temporal_url(file_path: str):
 
 
 def get_syncing_file_temporal_signed_url(file_path: str):
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
     blob.upload_from_filename(file_path)
@@ -226,6 +272,8 @@ def get_syncing_file_temporal_signed_url(file_path: str):
 
 
 def delete_syncing_temporal_file(file_path: str):
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
     blob.delete()
@@ -237,6 +285,8 @@ def delete_syncing_temporal_file(file_path: str):
 
 
 def _get_signed_url(blob, minutes):
+    if _disable_gcs or not storage_client:
+        return None
     if cached := get_cached_signed_url(blob.name):
         return cached
 
@@ -246,6 +296,8 @@ def _get_signed_url(blob, minutes):
 
 
 def upload_app_logo(file_path: str, app_id: str):
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(omi_apps_bucket)
     path = f'{app_id}.png'
     blob = bucket.blob(path)
@@ -255,6 +307,8 @@ def upload_app_logo(file_path: str, app_id: str):
 
 
 def delete_app_logo(img_url: str):
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(omi_apps_bucket)
     path = img_url.split(f'https://storage.googleapis.com/{omi_apps_bucket}/')[1]
     print('delete_app_logo', path)
@@ -263,6 +317,8 @@ def delete_app_logo(img_url: str):
 
 
 def upload_app_thumbnail(file_path: str, thumbnail_id: str) -> str:
+    if _disable_gcs or not storage_client:
+        return None
     bucket = storage_client.bucket(app_thumbnails_bucket)
     path = f'{thumbnail_id}.jpg'
     blob = bucket.blob(path)
@@ -291,6 +347,8 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> dict:
     Returns:
         dict: A dictionary mapping original filenames to their Google Cloud Storage URLs
     """
+    if _disable_gcs or not storage_client:
+        return {}
     bucket = storage_client.bucket(chat_files_bucket)
     result = transfer_manager.upload_many_from_filenames(
         bucket, files_name, source_directory="./", blob_name_prefix=f'{uid}/'
