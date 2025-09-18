@@ -75,7 +75,7 @@ hpack==4.0.0
 httpcore==1.0.5
 httplib2==0.22.0
 httptools==0.6.1
-httpx==0.25.2
+httpx==0.26.0
 httpx-sse==0.4.0
 huggingface-hub==0.24.5
 humanfriendly==10.0
@@ -213,7 +213,7 @@ SoundCard==0.4.3
 soundfile==0.12.1
 soxr==0.4.0
 speechbrain==1.0.0
-speechmatics-python==5.0.0
+# speechmatics-python==5.0.0  # Removed due to httpx conflicts
 SQLAlchemy==2.0.32
 stack-data==0.6.3
 starlette==0.37.2
