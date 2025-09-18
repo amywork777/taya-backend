@@ -28,18 +28,19 @@ from routers import (
 )
 from utils.other.timeout import TimeoutMiddleware
 
-# Initialize Firebase
+# Fix SERVICE_ACCOUNT_JSON issue - use base64 credentials instead
+os.environ["SERVICE_ACCOUNT_JSON"] = ""  # Clear the broken one
+
+# Initialize Firebase with base64 credentials
 if not firebase_admin._apps:
-    if os.environ.get('SERVICE_ACCOUNT_JSON'):
-        service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-        credentials = firebase_admin.credentials.Certificate(service_account_info)
-        firebase_admin.initialize_app(credentials)
-    elif os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_BASE64'):
+    if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_BASE64'):
         # Decode base64 service account for Railway
         import base64
         service_account_info = json.loads(base64.b64decode(os.environ["GOOGLE_APPLICATION_CREDENTIALS_BASE64"]).decode())
         credentials = firebase_admin.credentials.Certificate(service_account_info)
         firebase_admin.initialize_app(credentials)
+        # Set the proper SERVICE_ACCOUNT_JSON for database client
+        os.environ["SERVICE_ACCOUNT_JSON"] = json.dumps(service_account_info)
     else:
         firebase_admin.initialize_app()
 
