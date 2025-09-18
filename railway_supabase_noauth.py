@@ -85,9 +85,9 @@ print("📁 Directories created")
 @app.get("/")
 def read_root():
     return {
-        "message": "🚀 Taya Backend - Supabase No Auth!",
+        "message": "🚀 Taya Backend - Supabase No Auth DEPLOYED!",
         "status": "healthy",
-        "version": "3.0.0",
+        "version": "3.0.1",
         "database": "Supabase",
         "user_id": MOCK_USER_ID,
         "auth_disabled": True,
