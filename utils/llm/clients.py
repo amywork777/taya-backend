@@ -2,6 +2,7 @@ import os
 from typing import List
 
 from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.caches import BaseCache  # ensure forward ref exists
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 # Ensure Pydantic models are fully built for newer Pydantic versions
