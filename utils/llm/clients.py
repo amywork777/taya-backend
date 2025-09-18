@@ -3,6 +3,13 @@ from typing import List
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.caches import BaseCache  # ensure forward ref exists
+try:
+    from langchain_core.callbacks import Callbacks  # ensure forward ref exists
+except Exception:
+    try:
+        from langchain_core.callbacks.manager import Callbacks  # older import path
+    except Exception:
+        Callbacks = object  # placeholder to satisfy forward ref
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 # Ensure Pydantic models are fully built for newer Pydantic versions
