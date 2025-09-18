@@ -3,20 +3,34 @@ from typing import List
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+
+# Ensure Pydantic models are fully built for newer Pydantic versions
+try:
+    ChatOpenAI.model_rebuild()
+except Exception:
+    pass
+try:
+    OpenAIEmbeddings.model_rebuild()
+except Exception:
+    pass
 import tiktoken
 
 from models.conversation import Structured
 
 
-llm_mini = ChatOpenAI(model='gpt-4o-mini')
-llm_mini_stream = ChatOpenAI(model='gpt-4o-mini', streaming=True)
-llm_large = ChatOpenAI(model='o1-preview')
-llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1)
-llm_high = ChatOpenAI(model='o4-mini')
-llm_high_stream = ChatOpenAI(model='o4-mini', streaming=True, temperature=1)
-llm_medium = ChatOpenAI(model='gpt-4o')
-llm_medium_experiment = ChatOpenAI(model='gpt-4.1')
-llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
+def _make_llm(**kwargs):
+    # Avoid model initialization failures during import time; let errors surface at first use
+    return ChatOpenAI(**kwargs)
+
+llm_mini = _make_llm(model='gpt-4o-mini')
+llm_mini_stream = _make_llm(model='gpt-4o-mini', streaming=True)
+llm_large = _make_llm(model='o1-preview')
+llm_large_stream = _make_llm(model='o1-preview', streaming=True, temperature=1)
+llm_high = _make_llm(model='o4-mini')
+llm_high_stream = _make_llm(model='o4-mini', streaming=True, temperature=1)
+llm_medium = _make_llm(model='gpt-4o')
+llm_medium_experiment = _make_llm(model='gpt-4.1')
+llm_medium_stream = _make_llm(model='gpt-4o', streaming=True)
 llm_persona_mini_stream = ChatOpenAI(
     temperature=0.8,
     model="google/gemini-flash-1.5-8b",
