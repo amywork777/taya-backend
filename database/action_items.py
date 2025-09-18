@@ -82,9 +82,14 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
                 data[k] = v.isoformat()
         data.setdefault('id', str(uuid.uuid4()))
         data['uid'] = uid
-        res = supabase.table('action_items').insert(data).execute()
+        try:
+            res = supabase.table('action_items').insert(data).execute()
+        except Exception as e:
+            raise Exception(f"Supabase insert exception: {str(e)}; data={data}")
         if not res or not getattr(res, 'data', None):
-            raise Exception(f"Supabase insert failed for action_items: {getattr(res, 'error', None) or res}")
+            # Some clients return .data None and .count or .error; include safe repr
+            err = getattr(res, 'error', None)
+            raise Exception(f"Supabase insert failed for action_items: error={err}; data={data}")
         return res.data[0].get('id')
 
     user_ref = db.collection('users').document(uid)

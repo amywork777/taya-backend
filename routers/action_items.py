@@ -57,25 +57,35 @@ def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
 @router.post("/v1/action-items", response_model=ActionItemResponse, tags=['action-items'])
 def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Create a new action item."""
-    action_item_data = {
-        'description': request.description,
-        'completed': request.completed,
-        'due_at': request.due_at,
-        'conversation_id': request.conversation_id,
-    }
-
     try:
+        action_item_data = {
+            'description': request.description,
+            'completed': request.completed,
+            'due_at': request.due_at,
+            'conversation_id': request.conversation_id,
+        }
         action_item_id = action_items_db.create_action_item(uid, action_item_data)
         action_item = action_items_db.get_action_item(uid, action_item_id)
+        if not action_item:
+            raise RuntimeError('Created item not found after insert')
+        return ActionItemResponse(**action_item)
     except Exception as e:
         if os.getenv('SUPABASE_DEBUG', 'false').lower() == 'true':
-            raise HTTPException(status_code=400, detail=f"Supabase error: {str(e)}")
+            # Return structured debug info
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    'error': str(e),
+                    'payload': {
+                        'description': request.description,
+                        'completed': request.completed,
+                        'due_at': str(request.due_at) if request.due_at else None,
+                        'conversation_id': request.conversation_id,
+                        'uid': uid,
+                    },
+                },
+            )
         raise HTTPException(status_code=500, detail="Failed to create action item")
-
-    if not action_item:
-        raise HTTPException(status_code=500, detail="Failed to create action item")
-
-    return ActionItemResponse(**action_item)
 
 
 @router.get("/v1/action-items", tags=['action-items'])
