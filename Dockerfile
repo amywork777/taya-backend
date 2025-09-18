@@ -18,5 +18,5 @@ EXPOSE 8080
 RUN find . -name "*.pyc" -delete
 RUN find . -name "__pycache__" -delete
 
-# Start full-featured backend with database storage but no auth (fixed import order)
-CMD ["python", "railway_final_noauth.py"]
+# Start Supabase-powered backend with no auth
+CMD ["python", "railway_supabase_noauth.py"]
