@@ -3,13 +3,18 @@ from typing import Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
+import os
 
 from ._client import db, document_id_from_seed
+from database.supabase_client import supabase
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
 
 
 def is_exists_user(uid: str):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        res = supabase.table('users').select('id').eq('id', uid).single().execute()
+        return bool(res and getattr(res, 'data', None))
     user_ref = db.collection('users').document(uid)
     if not user_ref.get().exists:
         return False
@@ -18,6 +23,9 @@ def is_exists_user(uid: str):
 
 def get_user_profile(uid: str) -> dict:
     """Gets the full user profile document."""
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        res = supabase.table('users').select('*').eq('id', uid).single().execute()
+        return (res.data or {}) if res else {}
     user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get()
     if user_doc.exists:
@@ -26,35 +34,57 @@ def get_user_profile(uid: str) -> dict:
 
 
 def get_user_store_recording_permission(uid: str):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        res = supabase.table('users').select('store_recording_permission').eq('id', uid).single().execute()
+        data = res.data or {}
+        return data.get('store_recording_permission', False)
     user_ref = db.collection('users').document(uid)
     user_data = user_ref.get().to_dict()
     return user_data.get('store_recording_permission', False)
 
 
 def set_user_store_recording_permission(uid: str, value: bool):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        supabase.table('users').update({'store_recording_permission': value}).eq('id', uid).execute()
+        return
     user_ref = db.collection('users').document(uid)
     user_ref.update({'store_recording_permission': value})
 
 
 def create_person(uid: str, data: dict):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        payload = data.copy()
+        payload['uid'] = uid
+        supabase.table('people').upsert(payload).execute()
+        return data
     people_ref = db.collection('users').document(uid).collection('people')
     people_ref.document(data['id']).set(data)
     return data
 
 
 def get_person(uid: str, person_id: str):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        res = supabase.table('people').select('*').eq('uid', uid).eq('id', person_id).single().execute()
+        return res.data if res and getattr(res, 'data', None) else None
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_data = person_ref.get().to_dict()
     return person_data
 
 
 def get_people(uid: str):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        res = supabase.table('people').select('*').eq('uid', uid).execute()
+        return res.data or []
     people_ref = db.collection('users').document(uid).collection('people')
     people = people_ref.stream()
     return [person.to_dict() for person in people]
 
 
 def get_person_by_name(uid: str, name: str):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        res = supabase.table('people').select('*').eq('uid', uid).eq('name', name).limit(1).execute()
+        rows = res.data or []
+        return rows[0] if rows else None
     people_ref = db.collection('users').document(uid).collection('people')
     query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)
     docs = list(query.stream())
@@ -66,6 +96,13 @@ def get_person_by_name(uid: str, name: str):
 def get_people_by_ids(uid: str, person_ids: list[str]):
     if not person_ids:
         return []
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        all_people = []
+        for i in range(0, len(person_ids), 100):
+            chunk = person_ids[i:i+100]
+            res = supabase.table('people').select('*').eq('uid', uid).in_('id', chunk).execute()
+            all_people.extend(res.data or [])
+        return all_people
     people_ref = db.collection('users').document(uid).collection('people')
     # Firestore 'in' query supports up to 30 items.
     all_people = []
@@ -78,16 +115,32 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
 
 
 def update_person(uid: str, person_id: str, name: str):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        supabase.table('people').update({'name': name}).eq('uid', uid).eq('id', person_id).execute()
+        return
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_ref.update({'name': name})
 
 
 def delete_person(uid: str, person_id: str):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        supabase.table('people').delete().eq('uid', uid).eq('id', person_id).execute()
+        return
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_ref.delete()
 
 
 def delete_user_data(uid: str):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        # Delete rows across related tables by uid
+        for table in ['conversations', 'messages', 'chat_sessions', 'people', 'memories', 'files', 'analytics', 'action_items']:
+            try:
+                supabase.table(table).delete().eq('uid', uid).execute()
+            except Exception as e:
+                print(f"Supabase delete table {table} error: {e}")
+        supabase.table('users').delete().eq('id', uid).execute()
+        return {'status': 'ok', 'message': 'Account deleted successfully'}
+
     user_ref = db.collection('users').document(uid)
     if not user_ref.get().exists:
         return {'status': 'error', 'message': 'User not found'}
@@ -130,6 +183,17 @@ def delete_user_data(uid: str):
 
 
 def set_conversation_summary_rating_score(uid: str, conversation_id: str, value: int):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        doc_id = document_id_from_seed('memory_summary' + conversation_id)
+        supabase.table('analytics').upsert({
+            'id': doc_id,
+            'memory_id': conversation_id,
+            'uid': uid,
+            'value': value,
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'type': 'memory_summary',
+        }).execute()
+        return
     doc_id = document_id_from_seed('memory_summary' + conversation_id)
     db.collection('analytics').document(doc_id).set(
         {
@@ -144,6 +208,10 @@ def set_conversation_summary_rating_score(uid: str, conversation_id: str, value:
 
 
 def get_conversation_summary_rating_score(conversation_id: str):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        doc_id = document_id_from_seed('memory_summary' + conversation_id)
+        res = supabase.table('analytics').select('*').eq('id', doc_id).single().execute()
+        return res.data if res and getattr(res, 'data', None) else None
     doc_id = document_id_from_seed('memory_summary' + conversation_id)
     doc_ref = db.collection('analytics').document(doc_id)
     doc = doc_ref.get()
@@ -153,11 +221,25 @@ def get_conversation_summary_rating_score(conversation_id: str):
 
 
 def get_all_ratings(rating_type: str = 'memory_summary'):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        res = supabase.table('analytics').select('*').eq('type', rating_type).execute()
+        return res.data or []
     ratings = db.collection('analytics').where('type', '==', rating_type).stream()
     return [rating.to_dict() for rating in ratings]
 
 
 def set_chat_message_rating_score(uid: str, message_id: str, value: int):
+    if os.getenv('SUPABASE_URL') and os.getenv('SUPABASE_ANON_KEY'):
+        doc_id = document_id_from_seed('chat_message' + message_id)
+        supabase.table('analytics').upsert({
+            'id': doc_id,
+            'message_id': message_id,
+            'uid': uid,
+            'value': value,
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'type': 'chat_message',
+        }).execute()
+        return
     doc_id = document_id_from_seed('chat_message' + message_id)
     db.collection('analytics').document(doc_id).set(
         {
