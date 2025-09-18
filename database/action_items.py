@@ -45,8 +45,14 @@ def _prepare_action_item_for_read(action_item_data: dict) -> dict:
     """Prepare action item data for reading from database"""
     for field in ['created_at', 'updated_at', 'due_at', 'completed_at']:
         if field in action_item_data and action_item_data[field]:
-            if hasattr(action_item_data[field], 'timestamp'):
-                action_item_data[field] = datetime.fromtimestamp(action_item_data[field].timestamp(), tz=timezone.utc)
+            v = action_item_data[field]
+            if hasattr(v, 'timestamp'):
+                action_item_data[field] = datetime.fromtimestamp(v.timestamp(), tz=timezone.utc)
+            elif isinstance(v, str):
+                try:
+                    action_item_data[field] = datetime.fromisoformat(v.replace('Z', '+00:00'))
+                except Exception:
+                    pass
     return action_item_data
 
 

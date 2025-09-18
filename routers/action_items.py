@@ -99,15 +99,20 @@ def get_action_items(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Get action items for the current user."""
-    action_items = action_items_db.get_action_items(
-        uid=uid,
-        conversation_id=conversation_id,
-        completed=completed,
-        start_date=start_date,
-        end_date=end_date,
-        limit=limit,
-        offset=offset,
-    )
+    try:
+        action_items = action_items_db.get_action_items(
+            uid=uid,
+            conversation_id=conversation_id,
+            completed=completed,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset,
+        )
+    except Exception as e:
+        if os.getenv('SUPABASE_DEBUG', 'false').lower() == 'true':
+            raise HTTPException(status_code=400, detail=f"Supabase list error: {str(e)}")
+        raise
 
     for item in action_items:
         if item.get('is_locked', False):
